@@ -95,11 +95,15 @@
     <main class="w-full max-w-6xl flex flex-col gap-6 animate-pop">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             
-            <!-- ADD TO STORAGE FORM -->
+            <!-- ADD/EDIT TO STORAGE FORM -->
             <div class="glass-card rounded-xl p-5 flex flex-col gap-4 sticky top-10">
-                <h3 class="text-xs font-bold text-white uppercase tracking-widest border-b border-gray-800 pb-2 flex items-center gap-2">
+                <h3 id="form-title" class="text-xs font-bold text-[#ffb900] uppercase tracking-widest border-b border-gray-800 pb-2 flex items-center gap-2">
                     <span>📦</span> ADD TO STORAGE
                 </h3>
+                
+                <!-- Hidden Input for Edit ID -->
+                <input type="hidden" id="edit-stg-id">
+
                 <div class="flex flex-col gap-3 text-xs">
                     <div>
                         <label class="text-[9px] font-bold text-gray-400 uppercase tracking-widest pl-1">Item Name</label>
@@ -119,13 +123,21 @@
                             </label>
                         </div>
                     </div>
+                    
+                    <!-- Popup Category Selector -->
                     <div>
                         <label class="text-[9px] font-bold text-gray-400 uppercase tracking-widest pl-1">Category</label>
-                        <select id="stg-item-category" class="input-ff w-full rounded-lg p-3 mt-1 font-bold bg-[#0a0a0c]">
-                            <option value="">-- Select --</option>
-                        </select>
+                        <div class="flex gap-2 mt-1 relative">
+                            <input type="hidden" id="stg-item-category-id">
+                            <input type="text" id="stg-item-category-name" readonly class="input-ff flex-1 rounded-lg p-3 font-bold text-xs cursor-pointer bg-[#0a0a0c]" placeholder="Click to choose category..." onclick="openCategoryModal()">
+                            <button onclick="openCategoryModal()" class="bg-gray-800 border border-gray-600 hover:border-[#ffb900] hover:text-[#ffb900] px-4 text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors shrink-0">Select</button>
+                        </div>
                     </div>
-                    <button onclick="saveStorageItem()" class="btn-ff w-full font-bold py-3 text-[10px] uppercase tracking-widest mt-2"><span class="relative z-10">Save to Storage</span></button>
+
+                    <div class="flex gap-2 mt-2">
+                        <button id="btn-save-stg" onclick="saveStorageItem()" class="btn-ff flex-1 font-bold py-3 text-[10px] uppercase tracking-widest"><span class="relative z-10" id="btn-save-text">Save to Storage</span></button>
+                        <button id="btn-cancel-stg" onclick="resetStorageForm()" class="hidden bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-bold py-3 px-5 text-[10px] uppercase tracking-widest rounded-lg transition-colors">Cancel</button>
+                    </div>
                 </div>
             </div>
 
@@ -142,6 +154,21 @@
             
         </div>
     </main>
+
+    <!-- CATEGORY SELECTION POPUP (MODAL) -->
+    <div id="category-modal" class="hidden fixed inset-0 bg-[#060608]/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="glass-card w-full max-w-sm rounded-xl p-5 border-t-4 border-t-[#ffb900] flex flex-col gap-4 animate-pop">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                <h3 class="text-xs font-bold text-[#ffb900] uppercase tracking-widest">Select Category</h3>
+                <button onclick="closeCategoryModal()" class="text-gray-400 hover:text-white transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div id="modal-category-list" class="flex flex-col gap-2 max-h-[50vh] overflow-y-auto pr-1">
+                <!-- Categories dynamically injected here -->
+            </div>
+        </div>
+    </div>
 
     <!-- JS Logic -->
     <script>
@@ -164,11 +191,23 @@
 
         // --- 3. FIREBASE LISTENERS ---
         window.onload = () => {
-            // Listen to Categories (Needed for Dropdown & Names)
+            // Listen to Categories (With Default Category Fallback)
             db.ref("categories").on("value", (snap) => {
-                globalCategories = snap.val() || {};
-                updateStorageCategorySelect();
-                renderStorageItems(); // Re-render to update names if they changed
+                let cats = snap.val() || {};
+                
+                // --- Default Category Logic Restored ---
+                let avatarExists = Object.values(cats).some(c => c.name.toLowerCase() === "avatar");
+                if (!avatarExists) {
+                    cats["default_avatar_cat"] = {
+                        name: "Avatar",
+                        status: "Show",
+                        destination: "Store",
+                        image: ""
+                    };
+                }
+                
+                globalCategories = cats;
+                renderStorageItems(); // Update category names in list if changed
             });
 
             // Listen to Storage Items
@@ -187,12 +226,11 @@
             }
         }
 
-        // --- 5. IMAGE UPLOAD LOGIC (Cloudflare R2) ---
+        // --- 5. IMAGE UPLOAD LOGIC ---
         function uploadAdminImage(input, targetInputId) {
             if (input.files && input.files[0]) {
                 let file = input.files[0];
                 let safeName = Date.now() + "_" + file.name.replace(/[^a-zA-Z0-9.]/g, '_');
-                
                 let targetEl = document.getElementById(targetInputId);
                 targetEl.value = "Uploading...";
                 
@@ -210,66 +248,126 @@
                 };
                 
                 xhr.onload = () => {
-                    let publicUrl = `${R2_PUBLIC_URL}/Free fire/${safeName}`;
-                    targetEl.value = publicUrl;
+                    targetEl.value = `${R2_PUBLIC_URL}/Free fire/${safeName}`;
                 };
                 
                 xhr.onerror = () => {
                     targetEl.value = '';
                     alert('Upload failed! Check network connection.');
                 };
-                
                 xhr.send(file);
             }
         }
 
-        // --- 6. STORAGE MAIN LOGIC ---
-        function updateStorageCategorySelect() {
-            let select = document.getElementById("stg-item-category");
-            if (!select) return;
-            select.innerHTML = '<option value="">-- Select Category --</option>';
-            Object.keys(globalCategories).forEach(k => {
+        // --- 6. CATEGORY MODAL LOGIC ---
+        function openCategoryModal() {
+            document.getElementById('category-modal').classList.remove('hidden');
+            let container = document.getElementById("modal-category-list");
+            container.innerHTML = "";
+            
+            let keys = Object.keys(globalCategories);
+            let hasVisibleCategories = false;
+
+            keys.forEach(k => {
                 let cat = globalCategories[k];
                 if (cat.status === "Show") {
-                    let opt = document.createElement("option");
-                    opt.value = k;
-                    opt.innerText = cat.name;
-                    select.appendChild(opt);
+                    hasVisibleCategories = true;
+                    container.innerHTML += `
+                        <button onclick="selectCategory('${k}', '${cat.name}')" class="flex items-center gap-3 p-3 bg-black/40 border border-gray-800 hover:border-[#ffb900] hover:bg-[#ffb900]/10 rounded-lg text-left transition-all group">
+                            ${cat.image ? `<img src="${cat.image}" class="w-8 h-8 rounded-full object-cover border border-gray-700 group-hover:border-[#ffb900]">` : `<div class="w-8 h-8 rounded-full bg-gray-900 border border-gray-700 text-[#ffb900] flex items-center justify-center text-xs font-bold group-hover:border-[#ffb900]">${cat.name.charAt(0)}</div>`}
+                            <div class="flex flex-col">
+                                <span class="text-[11px] font-bold text-white uppercase tracking-wider group-hover:text-[#ffb900] transition-colors">${cat.name}</span>
+                                <span class="text-[8px] text-gray-500 uppercase tracking-widest">${cat.destination || 'Store'}</span>
+                            </div>
+                        </button>
+                    `;
                 }
             });
+
+            if (!hasVisibleCategories) {
+                container.innerHTML = '<span class="text-[10px] text-gray-500 text-center block py-4 uppercase font-bold tracking-widest">No Active Categories Found</span>';
+            }
         }
 
+        function closeCategoryModal() {
+            document.getElementById('category-modal').classList.add('hidden');
+        }
+
+        function selectCategory(id, name) {
+            document.getElementById('stg-item-category-id').value = id;
+            document.getElementById('stg-item-category-name').value = name;
+            closeCategoryModal();
+        }
+
+        // --- 7. STORAGE CRUD LOGIC ---
         function saveStorageItem() {
+            let id = document.getElementById("edit-stg-id").value;
             let name = document.getElementById("stg-item-name").value.trim();
             let desc = document.getElementById("stg-item-desc").value.trim();
             let image = document.getElementById("stg-item-image").value.trim();
-            let categoryId = document.getElementById("stg-item-category").value;
+            let categoryId = document.getElementById("stg-item-category-id").value;
 
             if (!name || !categoryId) { 
                 alert("Item name and category are required."); 
                 return; 
             }
 
-            let itemRef = db.ref("storage").push();
             let itemData = {
                 name: name,
                 description: desc,
                 image: image || '',
-                categoryId: categoryId,
-                createdAt: Date.now()
+                categoryId: categoryId
             };
+
+            let ref;
+            if (id) {
+                // Update existing item
+                ref = db.ref("storage/" + id);
+            } else {
+                // Create new item
+                itemData.createdAt = Date.now();
+                ref = db.ref("storage").push();
+            }
             
-            itemRef.set(itemData).then(() => {
-                // Clear Form
-                document.getElementById("stg-item-name").value = '';
-                document.getElementById("stg-item-desc").value = '';
-                document.getElementById("stg-item-image").value = '';
-                document.getElementById("stg-item-category").value = '';
-                alert(`"${name}" successfully saved to storage!`);
-                console.log(`[LOG] STORAGE_ADD: Added ${name} to storage`);
+            ref.update(itemData).then(() => {
+                alert(`"${name}" successfully ${id ? 'updated in' : 'saved to'} storage!`);
+                resetStorageForm();
             }).catch(error => {
                 alert("Failed to save item: " + error.message);
             });
+        }
+
+        function editStorageItem(itemId) {
+            let item = globalStorage[itemId];
+            if (!item) return;
+
+            document.getElementById("edit-stg-id").value = itemId;
+            document.getElementById("stg-item-name").value = item.name || '';
+            document.getElementById("stg-item-desc").value = item.description || '';
+            document.getElementById("stg-item-image").value = item.image || '';
+            
+            // Set Category
+            document.getElementById("stg-item-category-id").value = item.categoryId || '';
+            let catName = globalCategories[item.categoryId] ? globalCategories[item.categoryId].name : 'Unknown';
+            document.getElementById("stg-item-category-name").value = catName;
+
+            // Update UI for editing
+            document.getElementById("form-title").innerHTML = "<span>✏️</span> EDIT STORAGE ITEM";
+            document.getElementById("btn-save-text").innerText = "Update Item";
+            document.getElementById("btn-cancel-stg").classList.remove("hidden");
+        }
+
+        function resetStorageForm() {
+            document.getElementById("edit-stg-id").value = '';
+            document.getElementById("stg-item-name").value = '';
+            document.getElementById("stg-item-desc").value = '';
+            document.getElementById("stg-item-image").value = '';
+            document.getElementById("stg-item-category-id").value = '';
+            document.getElementById("stg-item-category-name").value = '';
+            
+            document.getElementById("form-title").innerHTML = "<span>📦</span> ADD TO STORAGE";
+            document.getElementById("btn-save-text").innerText = "Save to Storage";
+            document.getElementById("btn-cancel-stg").classList.add("hidden");
         }
 
         function renderStorageItems() {
@@ -299,7 +397,10 @@
                             <span class="text-[9px] text-[#ffb900] font-bold uppercase tracking-widest">${catName}</span>
                             ${item.description ? `<p class="text-[10px] text-gray-500 mt-1 truncate">${item.description}</p>` : ''}
                         </div>
-                        <button onclick="deleteStorageItem('${k}')" class="bg-red-950/40 border border-red-700/50 hover:bg-red-600 text-red-400 hover:text-white px-3 py-2 text-[9px] uppercase tracking-wider rounded font-extrabold transition-all duration-300">Delete</button>
+                        <div class="flex flex-col md:flex-row gap-2 shrink-0">
+                            <button onclick="editStorageItem('${k}')" class="bg-[#ffb900]/10 border border-[#ffb900]/30 hover:bg-[#ffb900] text-[#ffb900] hover:text-black px-3 py-2 text-[9px] uppercase tracking-wider rounded font-extrabold transition-all duration-300">Edit</button>
+                            <button onclick="deleteStorageItem('${k}')" class="bg-red-950/40 border border-red-700/50 hover:bg-red-600 text-red-400 hover:text-white px-3 py-2 text-[9px] uppercase tracking-wider rounded font-extrabold transition-all duration-300">Delete</button>
+                        </div>
                     </div>
                 `;
             }).join('');
@@ -308,7 +409,9 @@
         function deleteStorageItem(itemId) {
             if (confirm("Are you sure you want to permanently remove this item from storage?")) {
                 db.ref("storage/" + itemId).remove().then(() => {
-                    console.log(`[LOG] STORAGE_DELETE: Item ${itemId} deleted.`);
+                    if(document.getElementById("edit-stg-id").value === itemId) {
+                        resetStorageForm(); // Reset form if deleting the currently editing item
+                    }
                 }).catch(error => {
                     alert("Delete failed: " + error.message);
                 });
