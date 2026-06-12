@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booyah Day - Storage Warehouse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Teko:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #060608;
+            color: #f1f5f9;
+            background-image: radial-gradient(circle at top right, rgba(255, 185, 0, 0.05), transparent 40%),
+                              radial-gradient(circle at bottom left, rgba(255, 75, 0, 0.05), transparent 40%);
+            background-attachment: fixed;
+        }
+        .font-ff {
+            font-family: 'Teko', sans-serif;
+            text-transform: uppercase;
+        }
+        .glass-card {
+            background: rgba(15, 15, 20, 0.7);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 185, 0, 0.15);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+        }
+        .btn-ff {
+            position: relative;
+            background: linear-gradient(90deg, #ff9900 0%, #ff4b00 100%);
+            color: #fff;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+            border: none;
+            transition: all 0.25s ease;
+        }
+        .btn-ff::before {
+            content: '';
+            position: absolute;
+            inset: 1px;
+            background: linear-gradient(90deg, #e68a00 0%, #cc3c00 100%);
+            clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+            z-index: -1;
+        }
+        .btn-ff:hover {
+            filter: brightness(1.15);
+            box-shadow: 0 0 15px rgba(255, 153, 0, 0.4);
+        }
+        .btn-ff:active {
+            transform: scale(0.97);
+        }
+        .input-ff {
+            background: rgba(10, 10, 12, 0.85);
+            border: 1px solid rgba(255, 185, 0, 0.25);
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .input-ff:focus {
+            border-color: #ffb900;
+            box-shadow: 0 0 10px rgba(255, 185, 0, 0.25);
+            outline: none;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 185, 0, 0.25); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 185, 0, 0.5); }
+        
+        .animate-pop { animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        
+        .toggle-btn .chevron { transition: transform 0.3s ease; }
+        .toggle-btn.collapsed .chevron { transform: rotate(-90deg); }
+
+        @keyframes popIn {
+            from { transform: scale(0.97); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-10 flex flex-col items-center">
+
+    <div class="w-full max-w-6xl mb-8 flex items-center gap-4 border-b border-[#ffb900]/20 pb-4">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#ffb900] to-[#ff4b00] flex items-center justify-center text-black font-extrabold shadow-[0_0_15px_rgba(255,185,0,0.3)]">B</div>
+        <div>
+            <h1 class="text-2xl font-ff text-white tracking-widest leading-none">BOOYAH STORAGE</h1>
+            <span class="text-[9px] text-[#ffb900] font-bold uppercase tracking-[0.2em]">Standalone Warehouse Module</span>
+        </div>
+    </div>
+
+    <!-- MAIN STORAGE SECTION -->
+    <main class="w-full max-w-6xl flex flex-col gap-6 animate-pop">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            
+            <!-- ADD TO STORAGE FORM -->
+            <div class="glass-card rounded-xl p-5 flex flex-col gap-4 sticky top-10">
+                <h3 class="text-xs font-bold text-white uppercase tracking-widest border-b border-gray-800 pb-2 flex items-center gap-2">
+                    <span>📦</span> ADD TO STORAGE
+                </h3>
+                <div class="flex flex-col gap-3 text-xs">
+                    <div>
+                        <label class="text-[9px] font-bold text-gray-400 uppercase tracking-widest pl-1">Item Name</label>
+                        <input type="text" id="stg-item-name" class="input-ff w-full rounded-lg p-3 mt-1 font-bold" placeholder="e.g. Dragon Bundle">
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-bold text-gray-400 uppercase tracking-widest pl-1">Description</label>
+                        <textarea id="stg-item-desc" class="input-ff w-full rounded-lg p-3 mt-1 text-xs" placeholder="Optional description..." rows="2"></textarea>
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-bold text-gray-400 uppercase tracking-widest pl-1">Image URL</label>
+                        <div class="flex gap-2 mt-1">
+                            <input type="text" id="stg-item-image" class="input-ff flex-1 rounded-lg p-3 font-mono text-xs" placeholder="https://...">
+                            <label class="bg-gray-800 border border-gray-600 hover:border-white px-3 text-[9px] font-bold uppercase tracking-wider cursor-pointer rounded-lg flex items-center justify-center shrink-0">
+                                Upload
+                                <input type="file" accept="image/*" class="hidden" onchange="uploadAdminImage(this, 'stg-item-image')">
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-bold text-gray-400 uppercase tracking-widest pl-1">Category</label>
+                        <select id="stg-item-category" class="input-ff w-full rounded-lg p-3 mt-1 font-bold bg-[#0a0a0c]">
+                            <option value="">-- Select --</option>
+                        </select>
+                    </div>
+                    <button onclick="saveStorageItem()" class="btn-ff w-full font-bold py-3 text-[10px] uppercase tracking-widest mt-2"><span class="relative z-10">Save to Storage</span></button>
+                </div>
+            </div>
+
+            <!-- STORAGE ITEMS LIST -->
+            <div class="lg:col-span-2 glass-card rounded-xl p-5 flex flex-col gap-4">
+                <div onclick="toggleCollapse(this)" class="toggle-btn cursor-pointer flex items-center justify-between border-b border-gray-800 pb-2 select-none">
+                    <h3 class="text-xs font-bold text-white uppercase tracking-widest">STORAGE ITEMS WAREHOUSE</h3>
+                    <svg class="chevron w-4 h-4 text-gray-500 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+                <div id="stg-items-list" class="flex flex-col gap-2">
+                    <div class="text-center py-6 text-xs text-gray-500 font-bold uppercase tracking-wider">Loading storage...</div>
+                </div>
+            </div>
+            
+        </div>
+    </main>
+
+    <!-- JS Logic -->
+    <script>
+        // --- 1. FIREBASE SETUP ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBwXGyWQEXf-wqAT743px0viDVfKiRGQ0M",
+            authDomain: "booyah-day-offical.firebaseapp.com",
+            databaseURL: "https://booyah-day-offical-default-rtdb.firebaseio.com",
+            projectId: "booyah-day-offical",
+            storageBucket: "booyah-day-offical.firebasestorage.app"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // --- 2. GLOBAL VARIABLES ---
+        let globalCategories = {};
+        let globalStorage = {};
+        const R2_WORKER_URL = "https://file-uploader.lizanislamlemon.workers.dev";
+        const R2_PUBLIC_URL = "https://pub-4c6b2dbf3a0c4862a8964b1546de6283.r2.dev";
+
+        // --- 3. FIREBASE LISTENERS ---
+        window.onload = () => {
+            // Listen to Categories (Needed for Dropdown & Names)
+            db.ref("categories").on("value", (snap) => {
+                globalCategories = snap.val() || {};
+                updateStorageCategorySelect();
+                renderStorageItems(); // Re-render to update names if they changed
+            });
+
+            // Listen to Storage Items
+            db.ref("storage").on("value", (snap) => {
+                globalStorage = snap.val() || {};
+                renderStorageItems();
+            });
+        };
+
+        // --- 4. UTILITY FUNCTIONS ---
+        function toggleCollapse(el) {
+            el.classList.toggle("collapsed");
+            let content = el.nextElementSibling;
+            if (content) {
+                content.classList.toggle("hidden");
+            }
+        }
+
+        // --- 5. IMAGE UPLOAD LOGIC (Cloudflare R2) ---
+        function uploadAdminImage(input, targetInputId) {
+            if (input.files && input.files[0]) {
+                let file = input.files[0];
+                let safeName = Date.now() + "_" + file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+                
+                let targetEl = document.getElementById(targetInputId);
+                targetEl.value = "Uploading...";
+                
+                let xhr = new XMLHttpRequest();
+                xhr.open('PUT', `${R2_WORKER_URL}/upload?filename=${safeName}`);
+                xhr.setRequestHeader('X-Folder', 'Free fire');
+                xhr.setRequestHeader('X-Tags', 'storage-upload');
+                xhr.setRequestHeader('Content-Type', file.type);
+                
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        let perc = Math.round((e.loaded / e.total) * 100);
+                        targetEl.value = `Uploading... ${perc}%`;
+                    }
+                };
+                
+                xhr.onload = () => {
+                    let publicUrl = `${R2_PUBLIC_URL}/Free fire/${safeName}`;
+                    targetEl.value = publicUrl;
+                };
+                
+                xhr.onerror = () => {
+                    targetEl.value = '';
+                    alert('Upload failed! Check network connection.');
+                };
+                
+                xhr.send(file);
+            }
+        }
+
+        // --- 6. STORAGE MAIN LOGIC ---
+        function updateStorageCategorySelect() {
+            let select = document.getElementById("stg-item-category");
+            if (!select) return;
+            select.innerHTML = '<option value="">-- Select Category --</option>';
+            Object.keys(globalCategories).forEach(k => {
+                let cat = globalCategories[k];
+                if (cat.status === "Show") {
+                    let opt = document.createElement("option");
+                    opt.value = k;
+                    opt.innerText = cat.name;
+                    select.appendChild(opt);
+                }
+            });
+        }
+
+        function saveStorageItem() {
+            let name = document.getElementById("stg-item-name").value.trim();
+            let desc = document.getElementById("stg-item-desc").value.trim();
+            let image = document.getElementById("stg-item-image").value.trim();
+            let categoryId = document.getElementById("stg-item-category").value;
+
+            if (!name || !categoryId) { 
+                alert("Item name and category are required."); 
+                return; 
+            }
+
+            let itemRef = db.ref("storage").push();
+            let itemData = {
+                name: name,
+                description: desc,
+                image: image || '',
+                categoryId: categoryId,
+                createdAt: Date.now()
+            };
+            
+            itemRef.set(itemData).then(() => {
+                // Clear Form
+                document.getElementById("stg-item-name").value = '';
+                document.getElementById("stg-item-desc").value = '';
+                document.getElementById("stg-item-image").value = '';
+                document.getElementById("stg-item-category").value = '';
+                alert(`"${name}" successfully saved to storage!`);
+                console.log(`[LOG] STORAGE_ADD: Added ${name} to storage`);
+            }).catch(error => {
+                alert("Failed to save item: " + error.message);
+            });
+        }
+
+        function renderStorageItems() {
+            let container = document.getElementById("stg-items-list");
+            if (!container) return;
+            
+            let keys = Object.keys(globalStorage).filter(k => globalStorage[k] !== null);
+            
+            if (keys.length === 0) {
+                container.innerHTML = '<div class="text-center py-8 text-xs text-gray-500 font-bold uppercase tracking-wider bg-black/20 rounded-lg border border-gray-800 border-dashed">Storage is completely empty</div>';
+                return;
+            }
+            
+            // Sort keys by newest first (descending)
+            keys.sort((a, b) => (globalStorage[b].createdAt || 0) - (globalStorage[a].createdAt || 0));
+
+            container.innerHTML = keys.map(k => {
+                let item = globalStorage[k];
+                let catName = globalCategories[item.categoryId] ? globalCategories[item.categoryId].name : 'Unknown Category';
+                let itemImage = item.image || 'https://pub-4c6b2dbf3a0c4862a8964b1546de6283.r2.dev/Free fire/1780775687157_1780775598577.png';
+                
+                return `
+                    <div class="flex items-center gap-4 bg-black/40 border border-gray-800 rounded-lg p-3 hover:border-gray-700 transition-colors group">
+                        <img src="${itemImage}" class="w-12 h-12 object-contain rounded bg-black/60 border border-gray-800 p-1 group-hover:border-[#ffb900]/40 transition-colors">
+                        <div class="flex-1 min-w-0">
+                            <span class="text-sm font-bold text-white uppercase tracking-wider block truncate">${item.name}</span>
+                            <span class="text-[9px] text-[#ffb900] font-bold uppercase tracking-widest">${catName}</span>
+                            ${item.description ? `<p class="text-[10px] text-gray-500 mt-1 truncate">${item.description}</p>` : ''}
+                        </div>
+                        <button onclick="deleteStorageItem('${k}')" class="bg-red-950/40 border border-red-700/50 hover:bg-red-600 text-red-400 hover:text-white px-3 py-2 text-[9px] uppercase tracking-wider rounded font-extrabold transition-all duration-300">Delete</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function deleteStorageItem(itemId) {
+            if (confirm("Are you sure you want to permanently remove this item from storage?")) {
+                db.ref("storage/" + itemId).remove().then(() => {
+                    console.log(`[LOG] STORAGE_DELETE: Item ${itemId} deleted.`);
+                }).catch(error => {
+                    alert("Delete failed: " + error.message);
+                });
+            }
+        }
+    </script>
+</body>
+</html>
